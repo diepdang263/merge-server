@@ -1,0 +1,154 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
+        "This file is @generated automatically"
+    ],
+    "content-hash": "4b0a809793dad64354e92169aab63bf0",
+    "packages": [
+        {
+            "name": "amercier/cli-helpers",
+            "version": "v1.4.5",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/amercier/php-cli-helpers.git",
+                "reference": "5767dd441960c0ed89b64ba72fb312bf8e217739"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/amercier/php-cli-helpers/zipball/5767dd441960c0ed89b64ba72fb312bf8e217739",
+                "reference": "5767dd441960c0ed89b64ba72fb312bf8e217739",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.3"
+            },
+            "require-dev": {
+                "codeclimate/php-test-reporter": "^0.4.4",
+                "phpunit/phpunit": "^4.8",
+                "squizlabs/php_codesniffer": "^3.1"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "Cli": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "include-path": [
+                "src/"
+            ],
+            "license": [
+                "ISC"
+            ],
+            "description": "Utility classes to write PHP command-line scripts",
+            "homepage": "https://github.com/amercier/php-cli-helpers",
+            "keywords": [
+                "cli",
+                "command",
+                "command-line",
+                "helpers",
+                "line",
+                "utilities",
+                "utility"
+            ],
+            "time": "2017-11-15T21:10:18+00:00"
+        },
+        {
+            "name": "lijinma/php-cli-color",
+            "version": "1.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/lijinma/php-cli-color.git",
+                "reference": "5ee4f7414882b26a4a657428e9a15872bde99b38"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/lijinma/php-cli-color/zipball/5ee4f7414882b26a4a657428e9a15872bde99b38",
+                "reference": "5ee4f7414882b26a4a657428e9a15872bde99b38",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.3.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Lijinma\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Jinma li",
+                    "email": "lijinma@126.com",
+                    "homepage": "http://www.lijinma.com"
+                }
+            ],
+            "description": "Make colorful CLI output easy",
+            "homepage": "https://github.com/lijinma/php-cli-color",
+            "time": "2014-12-23T07:14:16+00:00"
+        },
+        {
+            "name": "wp-cli/php-cli-tools",
+            "version": "v0.11.8",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/wp-cli/php-cli-tools.git",
+                "reference": "363c75349f5dde561e0b416dd00f7aaa76fa2c27"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/wp-cli/php-cli-tools/zipball/363c75349f5dde561e0b416dd00f7aaa76fa2c27",
+                "reference": "363c75349f5dde561e0b416dd00f7aaa76fa2c27",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">= 5.3.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-0": {
+                    "cli": "lib/"
+                },
+                "files": [
+                    "lib/cli/cli.php"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "James Logsdon",
+                    "email": "jlogsdon@php.net",
+                    "role": "Developer"
+                },
+                {
+                    "name": "Daniel Bachhuber",
+                    "email": "daniel@handbuilt.co",
+                    "role": "Maintainer"
+                }
+            ],
+            "description": "Console utilities for PHP",
+            "homepage": "http://github.com/wp-cli/php-cli-tools",
+            "keywords": [
+                "cli",
+                "console"
+            ],
+            "time": "2017-10-12T21:50:48+00:00"
+        }
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "stability-flags": [],
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": [],
+    "platform-dev": []
+}

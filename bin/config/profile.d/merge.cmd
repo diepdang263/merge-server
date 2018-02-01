@@ -1,0 +1,1 @@
+"%CMDER_ROOT%/php/php.exe" "%CMDER_ROOT%/script/merge"

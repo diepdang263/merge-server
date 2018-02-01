@@ -1,0 +1,42 @@
+{
+  "name": "amercier/cli-helpers",
+  "description": "Utility classes to write PHP command-line scripts",
+  "type": "library",
+  "keywords": [
+    "cli",
+    "helpers",
+    "command",
+    "line",
+    "command-line",
+    "utility",
+    "utilities"
+  ],
+  "homepage": "https://github.com/amercier/php-cli-helpers",
+  "license": "ISC",
+  "autoload": {
+    "psr-0": {
+      "Cli": "src/"
+    }
+  },
+  "include-path": [
+    "src/"
+  ],
+  "require": {
+    "php": ">=5.3"
+  },
+  "require-dev": {
+    "squizlabs/php_codesniffer": "^3.1",
+    "codeclimate/php-test-reporter": "^0.4.4",
+    "phpunit/phpunit": "^4.8"
+  },
+  "scripts": {
+    "lint": [
+      "phpcs --extensions=php --standard=PSR1 src/",
+      "phpcs --extensions=php --standard=PSR2 src/"
+    ],
+    "test": [
+      "mkdir -p build/logs",
+      "phpunit --coverage-clover build/logs/clover.xml"
+    ]
+  }
+}

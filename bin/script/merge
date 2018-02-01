@@ -1,0 +1,589 @@
+<?php
+
+use Lijinma\Color;
+use ProgressBar\Manager;
+
+$startTime = microtime();
+
+# Check cli
+if (php_sapi_name() != 'cli') {
+    die('Must run from command line');
+}
+error_reporting(E_ALL | E_STRICT);
+ini_set('display_errors', 1);
+ini_set('log_errors', 0);
+ini_set('html_errors', 0);
+date_default_timezone_set('Asia/Ho_Chi_Minh');
+define('DS', DIRECTORY_SEPARATOR);
+
+// Require library
+require_once 'vendor/autoload.php';
+require_once 'lib/ProgressBar/Manager.php';
+require_once 'lib/ProgressBar/Registry.php';
+require_once 'lib/helper.php';
+
+// Choose game type
+$gameType = cli\menu(['ENG', 'VN'], false, 'Choose game type');
+if ($gameType == 0) {
+    $gmToolURL = 'http://gmt.choigamemu.com';
+} else {
+    $gmToolURL = 'http://gmtvn.choigamemu.com';
+}
+
+// Get all game and append to cli
+$listGames = json_decode(file_get_contents($gmToolURL . '/get_all_server.php'), true);
+
+$cliListGame = [];
+foreach ($listGames as $cliGame) {
+    $cliListGame[] = $cliGame['name'];
+}
+
+$gameFromCLI = cli\menu($cliListGame, false, 'Choose game you want merge');
+$game = $listGames[$gameFromCLI];
+
+// List server append to cli
+$cliListServer = [];
+foreach ($game['server'] as $cliServer) {
+    $cliListServer[] = $cliServer['ServerName'];
+}
+
+// Get merge from and merge to server
+$serverMergeFromCLI = cli\menu($cliListServer, false, 'Choose merge from server');
+$serverFrom = $game['server'][$serverMergeFromCLI];
+
+$changeZoneID = cli\choose('Server is single (y) or group (n)?', 'yn', 'y');
+
+$serverMergeToCLI = cli\menu($cliListServer, false, 'Choose merge to server');
+$serverTo = $game['server'][$serverMergeToCLI];
+
+// Filter character
+$changelifeFilter = (int) cli\prompt('Loc nhan vat duoi chuyen sinh ( 0 - 15 )', 4);
+if ($changelifeFilter < 0 || $changelifeFilter > 15) {
+    cli_error('Invalid changelife number');
+    die;
+}
+
+$loginFilter = cli\prompt('Loc nhan vat khong dang nhap tu ngay ( Y-m-d H:i:s )', date('Y-m-d 00:00:00', strtotime('- 15 days')));
+if (verifyDate($loginFilter) == false) {
+    cli_error('Invalid date format');
+    die;
+}
+
+$prefixNameDup = cli\prompt('Prefix before name if character allready exists', 'S' . $serverFrom['Id'] . '-');
+
+# Back up database
+$enableBackupDB = cli\choose('Do you want to back up database before merge?', 'yn', 'y');
+if ($enableBackupDB == 'y') {
+    if (!file_exists('D:' . DS . 'MergeBackUp')) {
+        cli\line('Create backup folder...');
+        mkdir('D:' . DS . 'MergeBackUp');
+    }
+
+    $backupFileName = 'D:' . DS . 'MergeBackUp' . DS . $game['prefix'] . 'mu_game_' . $serverTo['Id'] . '_' . date('YmdHis', time()) . '.sql';
+
+    $mysqlFolder = 'C:' . DS . 'Program Files' . DS . 'MySQL' . DS . 'MySQL Server 5.7' . DS . 'bin';
+
+    $backupCommand = '"' . $mysqlFolder . DS . 'mysqldump.exe" -uroot -pmumu@123asd mu_game_' . $serverTo['Id'] . '>' . $backupFileName;
+
+    exec($backupCommand);
+
+    cli_success('Backup database success!');
+}
+
+# Connect to game server
+$options = [
+    PDO::ATTR_EMULATE_PREPARES         => false,
+    PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
+    PDO::ATTR_PERSISTENT               => true,
+    PDO::ATTR_ERRMODE                  => PDO::ERRMODE_EXCEPTION,
+];
+
+try {
+    cli\line('Connect to database...');
+
+    $dbFrom = new PDO('mysql:host=localhost;dbname=mu_game_' . $serverFrom['Id'] . ';charset=utf8', 'root', 'mumu@123asd', $options);
+    $dbTo = new PDO('mysql:host=localhost;dbname=mu_game_' . $serverTo['Id'] . ';charset=utf8', 'root', 'mumu@123asd', $options);
+} catch (PDOException $e) {
+    cli_error($e->getMessage());
+    die;
+}
+
+cli\line('Start merge server ' . cli_color($serverFrom['Id'], Color::YELLOW) . ' to server ' . cli_color($serverTo['Id'], Color::YELLOW) . '...');
+//=============================================================================
+// Merge server
+//=============================================================================
+cli\line('Create temporary table...');
+try {
+    $dbTo->exec('DROP TABLE IF EXISTS `temp_info_merge`');
+    $create_temp_sql = 'CREATE TABLE IF NOT EXISTS `temp_info_merge` (
+`id` int(11) NOT NULL AUTO_INCREMENT,
+`rid_old` int(10) unsigned NOT NULL,
+`rid_new` int(10) unsigned,
+`rname` char(50) NOT NULL,
+`rname_new` char(50) DEFAULT NULL,
+`userid` char(50) NOT NULL,
+`bhname` VARCHAR(255) DEFAULT NULL,
+PRIMARY KEY (`id`),
+KEY `rid_old` (`rid_old`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;';
+    $dbTo->exec($create_temp_sql);
+
+    $dbTo->exec('DROP TABLE IF EXISTS `temp_banghui_merge`');
+    $create_temp_sql2 = 'CREATE TABLE IF NOT EXISTS `temp_banghui_merge` (
+`id` int(11) NOT NULL AUTO_INCREMENT,
+`id_old` int(10) unsigned NOT NULL,
+`id_new` int(10) unsigned NOT NULL,
+`bhname` VARCHAR(255) DEFAULT NULL,
+PRIMARY KEY (`id`),
+KEY `id_old` (`id_old`)
+) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8;';
+    $dbTo->exec($create_temp_sql2);
+} catch (PDOException $e) {
+    cli_error($e->getMessage());
+    die;
+}
+
+cli\line('Get character...');
+$characterMerge = $dbFrom->prepare('SELECT rid, rname, userid, bhname, lasttime FROM t_roles WHERE isdel = 0 AND changelifecount >= ' . $changelifeFilter);
+$characterMerge->execute();
+$characterMergeResult = $characterMerge->fetchAll(PDO::FETCH_ASSOC);
+
+cli\line('Insert to temporary table...');
+foreach ($characterMergeResult as $characterResult) {
+    if ($characterResult['lasttime'] >= $loginFilter) {
+        $insertTempCharacter = $dbTo->prepare('INSERT INTO temp_info_merge (rid_old, rname, userid, bhname) VALUES (:rid_old, :rname, :userid, :bhname)');
+        $insertTempCharacter->execute([
+            ':rid_old' => $characterResult['rid'],
+            ':rname'   => $characterResult['rname'],
+            ':userid'  => $characterResult['userid'],
+            ':bhname'  => $characterResult['bhname'],
+        ]);
+    }
+}
+
+$allCharacter = $dbTo->prepare('SELECT * FROM temp_info_merge');
+$allCharacter->execute();
+$allCharacterResult = $allCharacter->fetchAll(PDO::FETCH_ASSOC);
+
+//=========================
+// Merge Server
+//=========================
+cli\line('Copy ' . cli_color('t_roles', Color::YELLOW) . ' table...');
+foreach ($allCharacterResult as $character) {
+    // Check name duplicate
+    $checkDupName = $dbTo->prepare("SELECT rname FROM t_roles WHERE rname = '{$character['rname']}'");
+    $checkDupName->execute();
+    $checkDupNameResult = $checkDupName->fetch(PDO::FETCH_ASSOC);
+    if (!empty($checkDupNameResult['rname'])) {
+        $character['rname'] = $prefixNameDup . $character['rname'];
+    }
+
+    // get data from db
+    $fromCharacter = $dbFrom->prepare("SELECT * FROM t_roles WHERE rid = '{$character['rid_old']}'");
+    $fromCharacter->execute();
+    $fromCharacterResult = $fromCharacter->fetch(PDO::FETCH_ASSOC);
+
+    unset($fromCharacterResult['rid']);
+    unset($fromCharacterResult['predeltime']);
+
+    // Change zoneid
+    if ($changeZoneID == 'y') {
+        $fromCharacterResult['zoneid'] = (int) $serverFrom['Id'];
+    }
+
+    // Change rname
+    if (!empty($checkDupNameResult['rname'])) {
+        $fromCharacterResult['rname'] = $character['rname'];
+    }
+
+    // Change bhname
+    if (!empty($fromCharacterResult['bhname'])) {
+        $fromCharacterResult['bhname'] = $prefixNameDup . $fromCharacterResult['bhname'];
+    }
+
+    // Copy
+    $troleSql = insert_sql('t_roles', $fromCharacterResult);
+    $dbTo->exec($troleSql);
+
+    // Insert to temp table
+    $idNew = $dbTo->lastInsertId();
+    $dbTo->exec("UPDATE temp_info_merge SET rid_new = {$idNew}, rname_new = '{$character['rname']}' WHERE id = {$character['id']}");
+
+    unset($fromCharacterResult);
+}
+
+$allCharacter2 = $dbTo->prepare('SELECT * FROM temp_info_merge');
+$allCharacter2->execute();
+$allCharacterResult2 = $allCharacter2->fetchAll(PDO::FETCH_ASSOC);
+
+//=========================
+//=========================
+cli\line('Copy ' . cli_color('t_banghui', Color::YELLOW) . ' table...');
+$t_banghui = $dbFrom->prepare('SELECT * FROM t_banghui');
+$t_banghui->execute();
+$t_banghui = $t_banghui->fetchAll(PDO::FETCH_ASSOC);
+foreach ($t_banghui as $banghui) {
+    $idbanghui_old = $banghui['bhid'];
+    $namebanghui_old = $banghui['bhname'];
+    unset($banghui['bhid']);
+
+    // Change zoneid
+    if ($changeZoneID == 'y') {
+        $banghui['zoneid'] = (int) $serverFrom['Id'];
+    }
+
+    // Change data
+    $banghui['bhname'] = $prefixNameDup . $banghui['bhname'];
+    $banghui['qiname'] = $prefixNameDup . $banghui['qiname'];
+    $banghui['rid'] = getNewID($dbTo, $banghui['rid']);
+
+    // Insert to database 2
+    $sql = insert_sql('t_banghui', $banghui);
+    $insert_banghui = $dbTo->prepare($sql);
+    $insert_banghui->execute();
+    $banghui_id = $dbTo->lastInsertId();
+
+    // Update t_roles
+    $sql = 'UPDATE t_roles SET faction = ? WHERE bhname = ?';
+    $update_faction = $dbTo->prepare($sql);
+    $update_faction->execute([
+        $banghui_id,
+        $banghui['bhname'],
+    ]);
+
+    // Insert to temp table
+    $data_temp = [
+        'id_old' => $idbanghui_old,
+        'id_new' => $banghui_id,
+        'bhname' => $namebanghui_old,
+    ];
+
+    $temp_banghui = $dbTo->prepare(insert_sql('temp_banghui_merge', $data_temp));
+    $temp_banghui->execute();
+}
+
+//=======================
+//=======================
+cli\line('Copy ' . cli_color('t_roledata', Color::YELLOW) . ' table...');
+$t_roledata = $dbFrom->prepare('SELECT `rid`, TO_BASE64(`occu_data`) AS occu_data, TO_BASE64(`roledataex_ex`) AS roledataex_ex, TO_BASE64(`roledata4selector`) AS roledata4selector FROM t_roledata');
+$t_roledata->execute();
+$t_roledata = $t_roledata->fetchAll(PDO::FETCH_ASSOC);
+
+foreach ($t_roledata as $roledata) {
+    $roledata_id = getNewID($dbTo, $roledata['rid']);
+
+    if (!empty($roledata_id)) {
+        $roledata_sql = "REPLACE INTO t_roledata(rid, occu_data, roledataex_ex, roledata4selector) VALUES(?, FROM_BASE64(?), FROM_BASE64(?), FROM_BASE64(?))";
+
+        $insert_roledata = $dbTo->prepare($roledata_sql);
+        $insert_roledata->execute([
+            $roledata_id,
+            $roledata['occu_data'],
+            $roledata['roledataex_ex'],
+            $roledata['roledata4selector'],
+        ]);
+    }
+}
+
+//========================
+//========================
+$listTable = [
+    't_activate'              => ['userID', 'roleID'],
+    't_adorationinfo'         => ['roleid', 'adorationroleid'],
+    't_alchemy'               => ['rid'],
+    't_baitanbuy'             => ['rid', 'otherroleid', 'otherrname'],
+    't_ban_check'             => ['roleID'],
+    't_ban_log'               => ['userID', 'roleID'],
+    't_ban_trade'             => ['rid'],
+    't_banggongbuy'           => ['rid'],
+    't_banggonghist'          => ['rid'],
+    't_blackuserid'           => ['userid', 'changeUserID'],
+    't_buffer'                => ['rid'],
+    't_building'              => ['rid'],
+    't_change_name'           => ['roleid'],
+    't_cityinfo'              => ['userid', 'changeUserID'],
+    't_consumelog'            => ['rid'],
+    't_dailydata'             => ['rid'],
+    't_dailyjingmai'          => ['rid'],
+    't_dailytasks'            => ['rid'],
+    't_dayactivityinfo'       => ['roleid'],
+    't_djpoints'              => ['rid'],
+    't_everyday_activity'     => ['rid'],
+    't_exchange1'             => ['rid', 'otherroleid'],
+    't_exchange2'             => ['rid', 'otherroleid'],
+    't_exchange3'             => ['rid', 'otherroleid'],
+    't_facebook'              => ['roleID'],
+    't_fallgoods'             => ['rid'],
+    't_fluorescent_gem_equip' => ['roleid'],
+    't_friends'               => ['myid', 'otherid'],
+    't_fuben'                 => ['rid'],
+    't_fubenhist'             => ['rid', 'rname'],
+    't_fund'                  => ['userID', 'roleID'],
+    't_fuwen'                 => ['rid', 'name'],
+    't_giftcode'              => ['userid', 'rid'],
+    't_givemoney'             => ['rid'],
+    't_goldbuy'               => ['rid'],
+    't_goods'                 => ['rid'],
+    't_goodslimit'            => ['rid'],
+    't_goodsprops'            => ['rid'],
+    't_guard_soul'            => ['roleid'],
+    't_guard_statue'          => ['roleid'],
+    't_holyitem'              => ['roleid'],
+    't_hongbao_jieri_recv'    => ['rid', 'rname'],
+    't_hongbao_recv'          => ['rid', 'rname'],
+    't_horses'                => ['rid'],
+    't_huodong'               => ['rid'],
+    't_huodongawardrolehist'  => ['rid'],
+    't_huodongawarduserhist'  => ['userid', 'changeUserID'],
+    't_huodongpaihang'        => ['rid', 'rname'],
+    't_inputlog'              => ['rid'],
+    't_inputlog2'             => ['rid'],
+    't_jingjichang'           => ['roleId', 'roleName', 'name'],
+    't_jingjichang_zhanbao'   => ['roleId', 'challengeName'],
+    't_jingmai'               => ['rid'],
+    't_kf_day_role_log'       => ['rid'],
+    't_kf_hysy_role_log'      => ['rid'],
+    't_kf_tianti_game_log'    => ['rid'],
+    't_kf_tianti_role'        => ['rid'],
+    't_kfonlineawards'        => ['rid'],
+    't_king_role_data'        => ['role_id'],
+    't_limitgoodsbuy'         => ['rid'],
+    't_lingyu'                => ['roleid'],
+    't_login'                 => ['userid', 'rid'],
+    't_mail'                  => ['senderrid', 'senderrname', 'receiverrid', 'reveiverrname'],
+    't_mailtemp'              => ['receiverrid'],
+    't_mallbuy'               => ['rid'],
+    't_marry'                 => ['roleid', 'spouseid'],
+    't_marryparty'            => ['roleid', 'husbandid', 'wifeid'],
+    't_marryparty_join'       => ['roleid'],
+    't_merlin_magic_book'     => ['roleID'],
+    't_mojingexchangeinfo'    => ['roleid'],
+    't_money'                 => ['userid', 'changeUserID'],
+    't_name_check'            => ['name', 'changeName'],
+    't_npcbuy'                => ['rid'],
+    't_olympics_guess'        => ['roleID'],
+    't_ornament'              => ['roleid'],
+    't_pets'                  => ['rid'],
+    't_picturejudgeinfo'      => ['roleid'],
+    't_prenames'              => ['name', 'changeName'],
+    't_ptbag'                 => ['rid'],
+    't_pushmessageinfo'       => ['userid', 'changeUserID'],
+    't_qianggoubuy'           => ['rid'],
+    't_qizhengebuy'           => ['rid'],
+    't_refreshqizhen'         => ['rid'],
+    't_resourcegetinfo'       => ['roleid'],
+    't_rolegmail_record'      => ['roleid'],
+    't_roleparams'            => ['rid'],
+    't_roleparams_2'          => ['rid'],
+    't_roleparams_char'       => ['rid'],
+    't_roleparams_long'       => ['rid'],
+    't_secondpassword'        => ['userid', 'changeUserID'],
+    't_seven_day_act'         => ['roleid'],
+    't_shengxiaoguesshist'    => ['rid', 'rname'],
+    't_shenjifuwen'           => ['rid'],
+    't_skills'                => ['rid'],
+    't_special_activity'      => ['rid'],
+    't_spread_award'          => ['roleID'],
+    't_starconstellationinfo' => ['roleid'],
+    't_talent'                => ['roleID'],
+    't_talent_effect'         => ['roleID'],
+    't_talent_log'            => ['roleID'],
+    't_tarot'                 => ['roleid'],
+    't_tasks'                 => ['rid'],
+    't_taskslog'              => ['rid'],
+    't_tempitem'              => ['rid'],
+    't_tempmoney'             => ['rid'],
+    't_ten'                   => ['roleID'],
+    't_usedlipinma'           => ['rid'],
+    't_user_return_award'     => ['roleID'],
+    't_userstat'              => ['userid', 'changeUserID'],
+    't_vipdailydata'          => ['rid'],
+    't_wanmota'               => ['roleID', 'roleName'],
+    't_warning'               => ['rid'],
+    't_weboldplayer'          => ['rid'],
+    't_wings'                 => ['rid', 'rname'],
+    't_yabiao'                => ['rid'],
+    't_yangguangbkdailydata'  => ['rid'],
+    't_yaosaiboss'            => ['rid'],
+    't_yaosaiboss_fight'      => ['rid', 'otherrid', 'otherrname'],
+    't_yaosaimission'         => ['rid'],
+    't_yinliangbuy'           => ['rid'],
+    't_yinpiaobuy'            => ['rid'],
+    't_yueduchoujianghist'    => ['rid', 'rname'],
+    't_zajindanhist'          => ['rid', 'rname'],
+    't_zhanmengshijian'       => ['roleName', 'changeName'],
+];
+
+$colunmMaps = [
+    'userId'        => 'userid',
+    'userID'        => 'userid',
+    'otherrname'    => 'rname_new',
+    'rname'         => 'rname_new',
+    'roleName'      => 'rname_new',
+    'name'          => 'rname_new',
+    'challengeName' => 'rname_new',
+    'senderrname'   => 'rname_new',
+    'reveiverrname' => 'rname_new',
+];
+
+$colunmOldMaps = [
+    'userId'        => 'userid',
+    'userID'        => 'userid',
+    'otherrname'    => 'rname',
+    'rname'         => 'rname',
+    'roleName'      => 'rname',
+    'name'          => 'rname',
+    'challengeName' => 'rname',
+    'senderrname'   => 'rname',
+    'reveiverrname' => 'rname',
+];
+
+// Clear console
+system('clear');
+
+cli\line('Copy characters...');
+$progressCount = 0;
+$mergeProgressBar = new Manager($progressCount, count($allCharacterResult2));
+foreach ($allCharacterResult2 as $characterMerge) {
+    foreach ($listTable as $key => $value) {
+        if (in_array('changeUserID', $value)) {
+            $whereValue = $characterMerge['userid'];
+        } elseif (in_array('changeName', $value)) {
+            $whereValue = $characterMerge['rname'];
+        } else {
+            $whereValue = $characterMerge['rid_old'];
+        }
+
+        $oldData = $dbFrom->prepare('SELECT * FROM ' . $key . ' WHERE ' . $value[0] . " = '" . $whereValue . "'");
+        $oldData->execute();
+        $oldData = $oldData->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($oldData as $data) {
+            // Unset auto increment Id
+            if (isset($data['Id'])) {
+                unset($data['Id']);
+            }
+
+            if (isset($data['id']) AND $key != 't_seven_day_act') {
+                unset($data['id']);
+            }
+
+            if (isset($data['pkId'])) {
+                unset($data['pkId']);
+            }
+
+            if (isset($data['developtime'])) {
+                unset($data['developtime']);
+            }
+
+            # Change zoneid
+            if (isset($data['zoneid']) AND $changeZoneID == 'y') {
+                $data['zoneid'] = (int) $serverFrom['Id'];
+            }
+
+            if (isset($data['zoneId']) AND $changeZoneID == 'y') {
+                $data['zoneId'] = (int) $serverFrom['Id'];
+            }
+
+            if (isset($data['zoneID']) AND $changeZoneID == 'y') {
+                $data['zoneID'] = (int) $serverFrom['Id'];
+            }
+
+            if (isset($data['serverid']) AND $changeZoneID == 'y') {
+                $data['serverid'] = (int) $serverFrom['Id'];
+            }
+
+            //----
+            if (isset($data['cc'])) {
+                unset($data['cc']);
+            }
+
+            // Change data
+            for ($i = 0; $i < count($value); $i++) {
+                $getColunm = !empty($colunmMaps[$value[$i]]) ? $colunmMaps[$value[$i]] : 'rid_new';
+                $getColunmOld = !empty($colunmOldMaps[$value[$i]]) ? $colunmOldMaps[$value[$i]] : 'rid_old';
+
+                if ($value[$i] != 'changeUserID' && $value[$i] != 'changeName') {
+                    if ($data[$value[$i]] == $characterMerge[$getColunmOld]) {
+                        $data[$value[$i]] = $characterMerge[$getColunm];
+                    }
+                }
+            }
+
+            // Change id2
+            if (isset($data['spouseid'])) {
+                $data['spouseid'] = getNewID($dbTo, $data['spouseid']);
+            }
+
+            if (isset($data['husbandid'])) {
+                $data['husbandid'] = getNewID($dbTo, $data['husbandid']);
+            }
+
+            if (isset($data['wifeid'])) {
+                $data['wifeid'] = getNewID($dbTo, $data['wifeid']);
+            }
+
+            if (isset($data['receiverrid'])) {
+                $data['receiverrid'] = getNewID($dbTo, $data['receiverrid']);
+            }
+
+            if (isset($data['otherid'])) {
+                $data['otherid'] = getNewID($dbTo, $data['otherid']);
+            }
+
+            if (isset($data['otherrid'])) {
+                $data['otherrid'] = getNewID($dbTo, $data['otherrid']);
+            }
+
+            if (isset($data['otherroleid'])) {
+                $data['otherroleid'] = getNewID($dbTo, $data['otherroleid']);
+            }
+
+            if (isset($data['adorationroleid'])) {
+                $data['adorationroleid'] = getNewID($dbTo, $data['adorationroleid']);
+            }
+
+            // Change banghui ID
+            if (isset($data['bhId'])) {
+                $data['bhId'] = getNewBHID($dbTo, $data['bhId']);
+                $id = $data['bhId'];
+            }
+
+            if (isset($data['bhid'])) {
+                $data['bhid'] = getNewBHID($dbTo, $data['bhid']);
+                $id = $data['bhid'];
+            }
+
+            // Insert to db 2
+            $dbTo->exec(insert_sql($key, $data));
+        }
+
+        unset($oldData);
+    }
+
+    $mergeProgressBar->update($progressCount);
+    $progressCount++;
+}
+$mergeProgressBar->update($progressCount);
+
+// Drop CC column
+cli\line('Drop cc...');
+$check_cc = $dbTo->prepare("SHOW COLUMNS FROM `t_money` LIKE 'cc'");
+$check_cc->execute();
+$check_cc = $check_cc->fetch(PDO::FETCH_ASSOC);
+
+if ($check_cc) {
+    $drop_cc = $dbTo->prepare("ALTER TABLE `t_money` DROP COLUMN `cc`");
+    $drop_cc->execute();
+}
+
+// Edit config
+cli\line("Edit configuration...");
+$gameConfig = trim($game['prefix'], '_');
+$status = file_get_contents($gmToolURL . '/merge_server.php?from=' . $serverFrom['Id'] . '&to=' . $serverTo['Id'] . '&game=' . $gameConfig);
+if ($status != 8888) {
+    cli_error("Failed on edit configuration: $status");
+}
+
+cli\line();
+cli_success('Merge server successfully!!!');

@@ -1,0 +1,24 @@
+cd ..\
+cd ../
+bin/php/php.exe
+"bin/php/php.exe"
+"bin/php/php.exe" test.php
+alias
+alias /?
+cd ../../
+merge
+merge
+merge
+merge
+Undefined class constant 'MYSQL_ATTR_USE_BUFFERED_QUERY'
+merge
+merge
+Undefined class constant 'MYSQL_ATTR_USE_BUFFERED_QUERY'
+merge
+merge
+merge
+cd ../../
+cd script\
+php test.php
+cd ../
+"php/php.exe" "script\test.php"
