@@ -439,7 +439,7 @@ $colunmOldMaps = [
 ];
 
 // Clear console
-system('clear');
+system('cls');
 
 cli\line('Copy characters...');
 $progressCount = 0;
@@ -454,111 +454,126 @@ foreach ($allCharacterResult2 as $characterMerge) {
             $whereValue = $characterMerge['rid_old'];
         }
 
-        $oldData = $dbFrom->prepare('SELECT * FROM ' . $key . ' WHERE ' . $value[0] . " = '" . $whereValue . "'");
-        $oldData->execute();
-        $oldData = $oldData->fetchAll(PDO::FETCH_ASSOC);
+        # get total record in table
+        $totalRecord = $dbFrom->prepare('SELECT COUNT(*) AS total FROM ' . $key);
+        $totalRecord->execute();
+        $totalRecord = $totalRecord->fetch(PDO::FETCH_ASSOC);
 
-        foreach ($oldData as $data) {
-            // Unset auto increment Id
-            if (isset($data['Id'])) {
-                unset($data['Id']);
-            }
+        # Set limit value
+        $length = 0;
+        $minus[$key] = 0;
+        $total = ceil($totalRecord['total'] / 100000);
 
-            if (isset($data['id']) AND $key != 't_seven_day_act') {
-                unset($data['id']);
-            }
+        while ($length < $total) {
+            $oldData = $dbFrom->prepare('SELECT * FROM ' . $key . ' WHERE ' . $value[0] . " = '" . $whereValue . "' LIMIT {$minus[$key]}, 100000");
+            $oldData->execute();
+            $oldData = $oldData->fetchAll(PDO::FETCH_ASSOC);
 
-            if (isset($data['pkId'])) {
-                unset($data['pkId']);
-            }
+            foreach ($oldData as $data) {
+                // Unset auto increment Id
+                if (isset($data['Id'])) {
+                    unset($data['Id']);
+                }
 
-            if (isset($data['developtime'])) {
-                unset($data['developtime']);
-            }
+                if (isset($data['id']) AND $key != 't_seven_day_act') {
+                    unset($data['id']);
+                }
 
-            # Change zoneid
-            if (isset($data['zoneid']) AND $changeZoneID == 'y') {
-                $data['zoneid'] = (int) $serverFrom['Id'];
-            }
+                if (isset($data['pkId'])) {
+                    unset($data['pkId']);
+                }
 
-            if (isset($data['zoneId']) AND $changeZoneID == 'y') {
-                $data['zoneId'] = (int) $serverFrom['Id'];
-            }
+                if (isset($data['developtime'])) {
+                    unset($data['developtime']);
+                }
 
-            if (isset($data['zoneID']) AND $changeZoneID == 'y') {
-                $data['zoneID'] = (int) $serverFrom['Id'];
-            }
+                # Change zoneid
+                if (isset($data['zoneid']) AND $changeZoneID == 'y') {
+                    $data['zoneid'] = (int) $serverFrom['Id'];
+                }
 
-            if (isset($data['serverid']) AND $changeZoneID == 'y') {
-                $data['serverid'] = (int) $serverFrom['Id'];
-            }
+                if (isset($data['zoneId']) AND $changeZoneID == 'y') {
+                    $data['zoneId'] = (int) $serverFrom['Id'];
+                }
 
-            //----
-            if (isset($data['cc'])) {
-                unset($data['cc']);
-            }
+                if (isset($data['zoneID']) AND $changeZoneID == 'y') {
+                    $data['zoneID'] = (int) $serverFrom['Id'];
+                }
 
-            // Change data
-            for ($i = 0; $i < count($value); $i++) {
-                $getColunm = !empty($colunmMaps[$value[$i]]) ? $colunmMaps[$value[$i]] : 'rid_new';
-                $getColunmOld = !empty($colunmOldMaps[$value[$i]]) ? $colunmOldMaps[$value[$i]] : 'rid_old';
+                if (isset($data['serverid']) AND $changeZoneID == 'y') {
+                    $data['serverid'] = (int) $serverFrom['Id'];
+                }
 
-                if ($value[$i] != 'changeUserID' && $value[$i] != 'changeName') {
-                    if ($data[$value[$i]] == $characterMerge[$getColunmOld]) {
-                        $data[$value[$i]] = $characterMerge[$getColunm];
+                //----
+                if (isset($data['cc'])) {
+                    unset($data['cc']);
+                }
+
+                // Change data
+                for ($i = 0; $i < count($value); $i++) {
+                    $getColunm = !empty($colunmMaps[$value[$i]]) ? $colunmMaps[$value[$i]] : 'rid_new';
+                    $getColunmOld = !empty($colunmOldMaps[$value[$i]]) ? $colunmOldMaps[$value[$i]] : 'rid_old';
+
+                    if ($value[$i] != 'changeUserID' && $value[$i] != 'changeName') {
+                        if ($data[$value[$i]] == $characterMerge[$getColunmOld]) {
+                            $data[$value[$i]] = $characterMerge[$getColunm];
+                        }
                     }
                 }
+
+                // Change id2
+                if (isset($data['spouseid'])) {
+                    $data['spouseid'] = getNewID($dbTo, $data['spouseid']);
+                }
+
+                if (isset($data['husbandid'])) {
+                    $data['husbandid'] = getNewID($dbTo, $data['husbandid']);
+                }
+
+                if (isset($data['wifeid'])) {
+                    $data['wifeid'] = getNewID($dbTo, $data['wifeid']);
+                }
+
+                if (isset($data['receiverrid'])) {
+                    $data['receiverrid'] = getNewID($dbTo, $data['receiverrid']);
+                }
+
+                if (isset($data['otherid'])) {
+                    $data['otherid'] = getNewID($dbTo, $data['otherid']);
+                }
+
+                if (isset($data['otherrid'])) {
+                    $data['otherrid'] = getNewID($dbTo, $data['otherrid']);
+                }
+
+                if (isset($data['otherroleid'])) {
+                    $data['otherroleid'] = getNewID($dbTo, $data['otherroleid']);
+                }
+
+                if (isset($data['adorationroleid'])) {
+                    $data['adorationroleid'] = getNewID($dbTo, $data['adorationroleid']);
+                }
+
+                // Change banghui ID
+                if (isset($data['bhId'])) {
+                    $data['bhId'] = getNewBHID($dbTo, $data['bhId']);
+                    $id = $data['bhId'];
+                }
+
+                if (isset($data['bhid'])) {
+                    $data['bhid'] = getNewBHID($dbTo, $data['bhid']);
+                    $id = $data['bhid'];
+                }
+
+                // Insert to db 2
+                $dbTo->exec(insert_sql($key, $data));
             }
 
-            // Change id2
-            if (isset($data['spouseid'])) {
-                $data['spouseid'] = getNewID($dbTo, $data['spouseid']);
-            }
+            unset($oldData);
 
-            if (isset($data['husbandid'])) {
-                $data['husbandid'] = getNewID($dbTo, $data['husbandid']);
-            }
-
-            if (isset($data['wifeid'])) {
-                $data['wifeid'] = getNewID($dbTo, $data['wifeid']);
-            }
-
-            if (isset($data['receiverrid'])) {
-                $data['receiverrid'] = getNewID($dbTo, $data['receiverrid']);
-            }
-
-            if (isset($data['otherid'])) {
-                $data['otherid'] = getNewID($dbTo, $data['otherid']);
-            }
-
-            if (isset($data['otherrid'])) {
-                $data['otherrid'] = getNewID($dbTo, $data['otherrid']);
-            }
-
-            if (isset($data['otherroleid'])) {
-                $data['otherroleid'] = getNewID($dbTo, $data['otherroleid']);
-            }
-
-            if (isset($data['adorationroleid'])) {
-                $data['adorationroleid'] = getNewID($dbTo, $data['adorationroleid']);
-            }
-
-            // Change banghui ID
-            if (isset($data['bhId'])) {
-                $data['bhId'] = getNewBHID($dbTo, $data['bhId']);
-                $id = $data['bhId'];
-            }
-
-            if (isset($data['bhid'])) {
-                $data['bhid'] = getNewBHID($dbTo, $data['bhid']);
-                $id = $data['bhid'];
-            }
-
-            // Insert to db 2
-            $dbTo->exec(insert_sql($key, $data));
+            $length++;
+            $minus[$key] += 100000;
         }
-
-        unset($oldData);
     }
 
     $mergeProgressBar->update($progressCount);

@@ -22,3 +22,7 @@ cd script\
 php test.php
 cd ../
 "php/php.exe" "script\test.php"
+"php/php.exe" "script\test.php"
+clear
+ecls
+cls
