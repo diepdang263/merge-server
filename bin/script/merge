@@ -14,6 +14,8 @@ ini_set('display_errors', 1);
 ini_set('log_errors', 0);
 ini_set('html_errors', 0);
 date_default_timezone_set('Asia/Ho_Chi_Minh');
+set_time_limit(0);
+ini_set('memory_limit', -1);
 define('DS', DIRECTORY_SEPARATOR);
 
 // Require library
@@ -462,10 +464,10 @@ foreach ($allCharacterResult2 as $characterMerge) {
         # Set limit value
         $length = 0;
         $minus[$key] = 0;
-        $total = ceil($totalRecord['total'] / 100000);
+        $total = ceil($totalRecord['total'] / 200000);
 
         while ($length < $total) {
-            $oldData = $dbFrom->prepare('SELECT * FROM ' . $key . ' WHERE ' . $value[0] . " = '" . $whereValue . "' LIMIT {$minus[$key]}, 100000");
+            $oldData = $dbFrom->prepare('SELECT * FROM ' . $key . ' WHERE ' . $value[0] . " = '" . $whereValue . "' LIMIT {$minus[$key]}, 200000");
             $oldData->execute();
             $oldData = $oldData->fetchAll(PDO::FETCH_ASSOC);
 
@@ -572,14 +574,12 @@ foreach ($allCharacterResult2 as $characterMerge) {
             unset($oldData);
 
             $length++;
-            $minus[$key] += 100000;
+            $minus[$key] += 200000;
         }
     }
 
     $mergeProgressBar->update($progressCount);
     $progressCount++;
-
-    sleep(2);
 }
 $mergeProgressBar->update($progressCount);
 
