@@ -24,6 +24,37 @@ require_once 'lib/ProgressBar/Manager.php';
 require_once 'lib/ProgressBar/Registry.php';
 require_once 'lib/helper.php';
 
+function getPIDByProgressNameAndServerID($progressName, $serverID)
+{
+    // Get list PID
+    exec('tasklist /FI "ImageName eq ' . $progressName . '" /v /fo List>progress-list-with-name-' . $progressName . '.txt');
+
+    // Get file and Remove empty line
+    $file = ltrim(rtrim(file_get_contents('progress-list-with-name-' . $progressName . '.txt'), "\r\n"), "\r\n");
+    $content = array_values(array_filter(explode("\r\n", $file)));
+
+    // Get list pid
+    $listPIDContent = [];
+    for ($i = 1; $i < count($content); $i += 9) {
+        $listPIDContent[] = (int) trim(preg_replace('/\s+/', '', $content[$i]), 'PID:');
+    }
+
+    // Get list server
+    $listIDServer = [];
+    for ($k = 8; $k < count($content); $k += 9) {
+        $listServerContent = explode('@', $content[$k]);
+        $listIDServer[] = (int) filter_var($listServerContent[2], FILTER_SANITIZE_NUMBER_INT);
+    }
+
+    $listServerWithPID = array_combine($listIDServer, $listPIDContent);
+
+    if (isset($listServerWithPID[$serverID])) {
+        return $listServerWithPID[$serverID];
+    }
+
+    return null;
+}
+
 // Choose game type
 $gameType = cli\menu(['ENG', 'VN'], false, 'Choose game type');
 if ($gameType == 0) {
@@ -75,6 +106,32 @@ $prefixNameDup = cli\prompt('Prefix before name if character allready exists', '
 
 # Back up database
 $enableBackupDB = cli\choose('Do you want to back up database before merge?', 'yn', 'y');
+
+//=============================================================================
+// Close Server
+//=============================================================================
+cli\line('Close server...');
+// Kill merge from server
+$logDBServer = getPIDByProgressNameAndServerID('LogDBServer.exe', $serverFrom['Id']);
+$gameDBServer = getPIDByProgressNameAndServerID('GameDBServer.exe', $serverFrom['Id']);
+$gameServer = getPIDByProgressNameAndServerID('GameServer.exe', $serverFrom['Id']);
+
+exec("TASKKILL /F /PID $logDBServer");
+exec("TASKKILL /F /PID $gameDBServer");
+exec("TASKKILL /F /PID $gameServer");
+
+// Kill merge to server
+$logDBServer2 = getPIDByProgressNameAndServerID('LogDBServer.exe', $serverTo['Id']);
+$gameDBServer2 = getPIDByProgressNameAndServerID('GameDBServer.exe', $serverTo['Id']);
+$gameServer2 = getPIDByProgressNameAndServerID('GameServer.exe', $serverTo['Id']);
+
+exec("TASKKILL /F /PID $logDBServer2");
+exec("TASKKILL /F /PID $gameDBServer2");
+exec("TASKKILL /F /PID $gameServer2");
+
+//=============================================================================
+// Backup database
+//=============================================================================
 if ($enableBackupDB == 'y') {
     if (!file_exists('D:' . DS . 'MergeBackUp')) {
         cli\line('Create backup folder...');
